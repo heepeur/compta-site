@@ -1,69 +1,75 @@
 
 from flask import Flask, render_template, request, jsonify
-import json, os, requests
-from datetime import datetime
-import pytz
+from flask_sqlalchemy import SQLAlchemy
+import os
 
 app = Flask(__name__)
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get("DATABASE_URL")
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+db = SQLAlchemy(app)
 
-DATA_FILE = "data.json"
-MESSAGE_ID_FILE = "messageid.txt"
-WEBHOOK_URL = "https://discord.com/api/webhooks/1398323877528207443/zYe0wF8le79ilBk7x-T1NJZozLEZPHnR8KPUwtxyWW_nc5d3Lu8y0zvuraB4oXOZ4zbQ"
+# Modèle de base de données
+class Entry(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    date = db.Column(db.String(50))
+    description = db.Column(db.String(200))
+    montant = db.Column(db.Float)
+    type = db.Column(db.String(50))
 
-def load_data():
-    if os.path.exists(DATA_FILE):
-        with open(DATA_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    return []
+# Création des tables au premier lancement
+@app.before_first_request
+def create_tables():
+    db.create_all()
 
-def save_data(data):
-    with open(DATA_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=4)
-
-def load_webhook_message_id():
-    if os.path.exists(MESSAGE_ID_FILE):
-        with open(MESSAGE_ID_FILE, "r") as f:
-            return f.read().strip()
-    return None
-
-def save_webhook_message_id(message_id):
-    with open(MESSAGE_ID_FILE, "w") as f:
-        f.write(message_id)
-
+# Routes
 @app.route("/")
 def index():
     return render_template("index.html")
 
 @app.route("/api/entries", methods=["GET"])
 def get_entries():
-    return jsonify(load_data())
+    entries = Entry.query.all()
+    return jsonify([{
+        "date": e.date,
+        "description": e.description,
+        "montant": e.montant,
+        "type": e.type
+    } for e in entries])
 
 @app.route("/api/entries", methods=["POST"])
 def add_entry():
-    new_entry = request.json
-    data = load_data()
-    data.append(new_entry)
-    save_data(data)
+    data = request.json
+    entry = Entry(
+        date=data['date'],
+        description=data['description'],
+        montant=float(data['montant']),
+        type=data['type']
+    )
+    db.session.add(entry)
+    db.session.commit()
     return jsonify({"status": "success"})
 
 @app.route("/api/entries/<int:index>", methods=["PUT"])
-def edit_entry(index):
-    updated_entry = request.json
-    data = load_data()
-    if 0 <= index < len(data):
-        data[index] = updated_entry
-        save_data(data)
+def update_entry(index):
+    data = request.json
+    entry = Entry.query.get(index)
+    if entry:
+        entry.date = data['date']
+        entry.description = data['description']
+        entry.montant = float(data['montant'])
+        entry.type = data['type']
+        db.session.commit()
         return jsonify({"status": "success"})
-    return jsonify({"status": "error"}), 400
+    return jsonify({"status": "error", "message": "Not found"}), 404
 
 @app.route("/api/entries/<int:index>", methods=["DELETE"])
 def delete_entry(index):
-    data = load_data()
-    if 0 <= index < len(data):
-        data.pop(index)
-        save_data(data)
+    entry = Entry.query.get(index)
+    if entry:
+        db.session.delete(entry)
+        db.session.commit()
         return jsonify({"status": "success"})
-    return jsonify({"status": "error"}), 400
+    return jsonify({"status": "error", "message": "Not found"}), 404
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
