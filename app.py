@@ -8,7 +8,7 @@ app = Flask(__name__)
 
 DATA_FILE = "data.json"
 MESSAGE_ID_FILE = "messageid.txt"
-WEBHOOK_URL = "WEBHOOK_URL"
+WEBHOOK_URL = "https://discord.com/api/webhooks/1398323877528207443/zYe0wF8le79ilBk7x-T1NJZozLEZPHnR8KPUwtxyWW_nc5d3Lu8y0zvuraB4oXOZ4zbQ"
 
 def load_data():
     if os.path.exists(DATA_FILE):
